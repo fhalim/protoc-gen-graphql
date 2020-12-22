@@ -241,8 +241,17 @@ func (m *Mapper) buildMessageMapper(message *descriptor.Message, input bool) {
 
 	var oneofMappers []*OneofMapper
 	for _, oneof := range message.Oneofs {
-		oneofMappers = append(oneofMappers, m.buildOneofMapper(oneof, input))
+		var existedMapper *OneofMapper
+		// look for an existed mapper for `oneof.Proto.GetName()`
+		// and pass it to buildOneofMapper
+		for _, mapper := range mapper.Oneofs {
+			if mapper.Descriptor.Proto.GetName() == oneof.Proto.GetName() {
+				existedMapper = mapper
+			}
+		}
+		oneofMappers = append(oneofMappers, m.buildOneofMapper(oneof, input, typeName, existedMapper))
 	}
+
 	mapper.Oneofs = oneofMappers
 
 	for _, field := range message.Proto.GetField() {
@@ -435,13 +444,60 @@ func (m *Mapper) graphqlSpecialTypes(field *graphql.Field, protoTypeName string)
 	return field
 }
 
-func (m *Mapper) buildOneofMapper(oneof *descriptor.Oneof, input bool) *OneofMapper {
+// use `typeName` from `buildMessageMapper` as Union or Input name
+// don't need to create a intermediate Object between Message and Message with oneof, use Union directly
+// but with intermediate Object's name
+//
+// e.g.:
+//
+//  message NewMessage {
+//    UInformation u_information = 1;
+//  }
+//
+//  message UInformation {
+//    oneof value {
+//      AInformation a_information = 1;
+//      BInformation b_information = 2;
+//    }
+//  }
+//
+// becomes
+//
+//  union Path_UInformation = Path_UInformation_AInformation | Path_UInformation_BInformation
+//
+//  type Path_NewMessage {
+//    u_information: Path_UInformation
+//  }
+func (m *Mapper) buildOneofMapper(oneof *descriptor.Oneof, input bool, typeName string, existedMapper *OneofMapper) *OneofMapper {
+	var mapper *OneofMapper
+
+	// no need to create a new mapper if a mapper for oneof.Proto.GetName() already exists
+	// reuse the existed instead
+	if existedMapper != nil {
+		mapper = existedMapper
+	} else {
+		mapper = m.createMapper(oneof, typeName)
+	}
+
+	if !input {
+		return mapper
+	}
+
+	var inputFields []*graphql.Field
+	for _, field := range oneof.Fields {
+		inputFields = append(inputFields, m.graphqlField(field, true))
+	}
+
+	mapper.Input = &graphql.Input{
+		Name:   typeName,
+		Fields: inputFields,
+	}
+
+	return mapper
+}
+
+func (m *Mapper) createMapper(oneof *descriptor.Oneof, unionTypeName string) *OneofMapper {
 	oneofObjectName := oneof.Proto.GetName() + "Oneof"
-	unionTypeName := m.buildGraphqlTypeName(&GraphqlTypeNameParts{
-		Namespace: oneof.Parent.File.Options.GetNamespace(),
-		Package:   oneof.Parent.Package,
-		TypeName:  append(oneof.Parent.TypeName, oneofObjectName),
-	})
 	mapper := &OneofMapper{
 		Descriptor: oneof,
 		Union: &graphql.Union{
@@ -468,25 +524,6 @@ func (m *Mapper) buildOneofMapper(oneof *descriptor.Oneof, input bool) *OneofMap
 				m.graphqlField(field, false),
 			},
 		})
-	}
-
-	if !input {
-		return mapper
-	}
-
-	var inputFields []*graphql.Field
-	for _, field := range oneof.Fields {
-		inputFields = append(inputFields, m.graphqlField(field, true))
-	}
-
-	mapper.Input = &graphql.Input{
-		Name: m.buildGraphqlTypeName(&GraphqlTypeNameParts{
-			Namespace: oneof.Parent.File.Options.GetNamespace(),
-			Package:   oneof.Parent.Package,
-			TypeName:  append(oneof.Parent.TypeName, oneofObjectName),
-			Input:     true,
-		}),
-		Fields: inputFields,
 	}
 
 	return mapper

@@ -80,7 +80,7 @@ func (g *Generator) generateFiles() {
 		for _, message := range file.Messages {
 			m := g.mapper.MessageMappers[message.FullName]
 
-			if m.Object != nil {
+			if m.Object != nil && len(m.Oneofs) == 0 {
 				gqlTypes = append(gqlTypes, m.Object)
 			}
 			for _, oneof := range m.Oneofs {
@@ -90,7 +90,7 @@ func (g *Generator) generateFiles() {
 				}
 			}
 
-			if m.Input != nil {
+			if m.Input != nil && len(m.Oneofs) == 0 {
 				gqlTypes = append(gqlTypes, m.Input)
 			}
 			for _, oneof := range m.Oneofs {
