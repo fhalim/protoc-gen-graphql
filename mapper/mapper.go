@@ -476,7 +476,7 @@ func (m *Mapper) buildOneofMapper(oneof *descriptor.Oneof, input bool, typeName 
 	if existedMapper != nil {
 		mapper = existedMapper
 	} else {
-		mapper = m.createMapper(oneof, typeName)
+		mapper = m.createMapper(oneof, fmt.Sprintf("%s_%sOneof", typeName, generator.CamelCase(*oneof.Proto.Name)))
 	}
 
 	if !input {

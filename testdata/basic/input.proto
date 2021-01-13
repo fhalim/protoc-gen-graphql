@@ -50,6 +50,10 @@ message ComplexFields {
     string deprecated = 8 [deprecated = true];
   }
   Empty empty_field = 9;
+  oneof oneof_thesecond {
+    string second_oneof_field1 = 10;
+    int64 second_oneof_field2 = 11;
+  }
 }
 
 message Outer {
